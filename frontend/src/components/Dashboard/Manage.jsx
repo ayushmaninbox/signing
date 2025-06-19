@@ -1137,6 +1137,136 @@ const DocumentPreview = ({ isOpen, setIsOpen, document }) => {
   );
 };
 
+// Custom Actions Dropdown with dynamic positioning
+const ActionsDropdown = ({ document, onActionClick, isDownloading }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [dropdownDirection, setDropdownDirection] = useState('down');
+  const buttonRef = useRef(null);
+  const dropdownRef = useRef(null);
+
+  const currentUser = {
+    email: "john.doe@cloudbyz.com",
+    id: "us1122334456",
+  };
+
+  const getAvailableActions = (document) => {
+    const isAuthor =
+      document.AuthorEmail === currentUser.email &&
+      document.AuthorID === currentUser.id;
+    const isSignee = document.Signees.some(
+      (signee) => signee.email === currentUser.email
+    );
+    const hasUserSigned = document.AlreadySigned.some(
+      (signed) => signed.email === currentUser.email
+    );
+
+    const actions = [];
+
+    if (document.Status === "Draft" && isAuthor) {
+      actions.push("Setup Sign");
+    } else if (document.Status === "Sent for signature") {
+      if (isAuthor) {
+        actions.push("Resend");
+      }
+      if (isSignee && !hasUserSigned) {
+        actions.push("Sign");
+      }
+    } else if (document.Status === "Completed" && (isAuthor || isSignee)) {
+      actions.push("Download");
+    }
+
+    if (isAuthor) {
+      actions.push("Preview");
+    }
+
+    return actions;
+  };
+
+  const checkDropdownPosition = () => {
+    if (buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      const viewportHeight = window.innerHeight;
+      const spaceBelow = viewportHeight - rect.bottom;
+      const spaceAbove = rect.top;
+      
+      // If there's not enough space below (less than 200px) and more space above, open upward
+      const shouldOpenUpward = spaceBelow < 200 && spaceAbove > spaceBelow;
+      setDropdownDirection(shouldOpenUpward ? 'up' : 'down');
+    }
+  };
+
+  const handleToggle = () => {
+    if (!isOpen) {
+      checkDropdownPosition();
+    }
+    setIsOpen(!isOpen);
+  };
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target) &&
+        buttonRef.current &&
+        !buttonRef.current.contains(event.target)
+      ) {
+        setIsOpen(false);
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isOpen]);
+
+  const handleActionClick = (action) => {
+    onActionClick(action, document);
+    setIsOpen(false);
+  };
+
+  const availableActions = getAvailableActions(document);
+
+  return (
+    <div className="relative">
+      <button
+        ref={buttonRef}
+        onClick={handleToggle}
+        disabled={isDownloading}
+        className={`text-sm font-medium text-gray-800 border border-gray-300 rounded px-3 py-1.5 flex items-center ${
+          isDownloading ? "opacity-50 cursor-not-allowed" : "hover:bg-gray-50"
+        }`}
+      >
+        Actions <ChevronDown className="ml-1 w-4 h-4" />
+      </button>
+
+      {isOpen && (
+        <div
+          ref={dropdownRef}
+          className={`absolute ${
+            dropdownDirection === 'up' ? 'bottom-full mb-1' : 'top-full mt-1'
+          } right-0 w-48 bg-white rounded-md shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none z-50`}
+        >
+          <div className="py-1">
+            {availableActions.map((action) => (
+              <button
+                key={action}
+                className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                onClick={() => handleActionClick(action)}
+              >
+                {action}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const Manage = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -1234,39 +1364,6 @@ const Manage = () => {
     } else {
       alert("Only the author of the document can access the preview.");
     }
-  };
-
-  const getAvailableActions = (document) => {
-    const isAuthor =
-      document.AuthorEmail === currentUser.email &&
-      document.AuthorID === currentUser.id;
-    const isSignee = document.Signees.some(
-      (signee) => signee.email === currentUser.email
-    );
-    const hasUserSigned = document.AlreadySigned.some(
-      (signed) => signed.email === currentUser.email
-    );
-
-    const actions = [];
-
-    if (document.Status === "Draft" && isAuthor) {
-      actions.push("Setup Sign");
-    } else if (document.Status === "Sent for signature") {
-      if (isAuthor) {
-        actions.push("Resend");
-      }
-      if (isSignee && !hasUserSigned) {
-        actions.push("Sign");
-      }
-    } else if (document.Status === "Completed" && (isAuthor || isSignee)) {
-      actions.push("Download");
-    }
-
-    if (isAuthor) {
-      actions.push("Preview");
-    }
-
-    return actions;
   };
 
   const handleSelectDocument = (docId) => {
@@ -1603,39 +1700,11 @@ const Manage = () => {
                             isDownloading ? "opacity-50 pointer-events-none" : ""
                           }`}
                         >
-                          <Menu as="div" className="relative">
-                            <Menu.Button className="text-sm font-medium text-gray-800 border border-gray-300 rounded px-3 py-1.5 flex items-center">
-                              Actions <ChevronDown className="ml-1 w-4 h-4" />
-                            </Menu.Button>
-                            <Transition
-                              as={Fragment}
-                              enter="transition ease-out duration-100"
-                              enterFrom="transform opacity-0 scale-95"
-                              enterTo="transform opacity-100 scale-100"
-                              leave="transition ease-in duration-75"
-                              leaveFrom="transform opacity-100 scale-100"
-                              leaveTo="transform opacity-0 scale-95"
-                            >
-                              <Menu.Items className="absolute right-0 mt-2 w-48 origin-top-right bg-white rounded-md shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none z-10">
-                                {getAvailableActions(doc).map((action) => (
-                                  <Menu.Item key={action}>
-                                    {({ active }) => (
-                                      <button
-                                        className={`${
-                                          active ? "bg-gray-100" : ""
-                                        } block px-4 py-2 text-sm text-gray-700 w-full text-left`}
-                                        onClick={() =>
-                                          handleActionClick(action, doc)
-                                        }
-                                      >
-                                        {action}
-                                      </button>
-                                    )}
-                                  </Menu.Item>
-                                ))}
-                              </Menu.Items>
-                            </Transition>
-                          </Menu>
+                          <ActionsDropdown
+                            document={doc}
+                            onActionClick={handleActionClick}
+                            isDownloading={isDownloading}
+                          />
                         </div>
                       </td>
                     </tr>
